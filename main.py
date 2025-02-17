@@ -95,6 +95,16 @@ class SchedulingApp:
         self.shift_tree.heading("班次", text="班次")
         self.shift_tree.grid(row=7, column=0, columnspan=4, padx=5, pady=5)
 
+        # 禁排組合
+        self.label_exclusion = ttk.Label(root, text="禁排員工組合：")
+        self.label_exclusion.grid(row=8, column=0, padx=5, pady=5)
+        self.combo_exclusion_employee_1 = ttk.Combobox(root, values=list(self.employees.keys()), state="readonly", width=10)
+        self.combo_exclusion_employee_1.grid(row=8, column=1, padx=5, pady=5)
+        self.combo_exclusion_employee_2 = ttk.Combobox(root, values=list(self.employees.keys()), state="readonly", width=10)
+        self.combo_exclusion_employee_2.grid(row=8, column=2, padx=5, pady=5)
+        self.btn_add_exclusion = ttk.Button(root, text="新增禁排組合", command=self.add_exclusion)
+        self.btn_add_exclusion.grid(row=8, column=3, padx=5, pady=5)
+
     def update_dates(self, event=None):
         year = int(self.year_var.get())
         month = int(self.month_var.get())
@@ -119,6 +129,8 @@ class SchedulingApp:
             self.shift_counts[name] = {"一線": int(primary_shifts), "二線": int(secondary_shifts)}
             self.employee_tree.insert("", tk.END, iid=name, values=(name, ", ".join(map(str, unavailable_dates_list)), primary_shifts, secondary_shifts))
             self.combo_employee["values"] = list(self.employees.keys())
+            self.combo_exclusion_employee_1["values"] = list(self.employees.keys())  # 更新禁排組合1
+            self.combo_exclusion_employee_2["values"] = list(self.employees.keys())  # 更新禁排組合2
             self.entry_name.delete(0, tk.END)
             self.entry_unavailable.delete(0, tk.END)
             self.entry_shift_primary.delete(0, tk.END)
@@ -130,38 +142,55 @@ class SchedulingApp:
         employee = self.combo_employee.get()
         date = self.combo_date.get()
         shift_type = self.combo_shift_type.get()
-
         if not employee or not date or not shift_type:
             messagebox.showwarning("錯誤", "請選擇員工、日期和班次")
             return
-
+        # 檢查員工是否有在選擇的日期有不可排班日
+        if int(date) in self.unavailable_dates.get(employee, []):
+            messagebox.showwarning("錯誤", f"{employee} 在 {date} 不可排班")
+            return
         # 如果員工尚未有預排班次，則創建一個新的列表
         if employee not in self.preassigned_shifts:
             self.preassigned_shifts[employee] = []
-
         # 確保這個員工在這個日期和班次上還沒排過班
         if any(item['date'] == date and item['shift'] == shift_type for item in self.preassigned_shifts[employee]):
             messagebox.showwarning("錯誤", f"{employee} 已在 {date} 排過 {shift_type} 班")
             return
-
         # 將新的排班信息加入列表
         self.preassigned_shifts[employee].append({'date': date, 'shift': shift_type})
-
         messagebox.showinfo("成功", f"成功為 {employee} 預排 {date} 的 {shift_type} 班")
-        
         self.update_preassigned_shifts_treeview()
 
     def update_preassigned_shifts_treeview(self):
         # 清空 Treeview
         for row in self.shift_tree.get_children():
             self.shift_tree.delete(row)
-        
         # 將 preassigned_shifts 中的資料顯示在 Treeview
         for employee, shifts in self.preassigned_shifts.items():
             for shift in shifts:
                 self.shift_tree.insert("", tk.END, values=(employee, shift['date'], shift['shift']))
 
-
+    def add_exclusion(self):
+            employee_1 = self.combo_exclusion_employee_1.get().strip()
+            employee_2 = self.combo_exclusion_employee_2.get().strip()
+            # 檢查是否兩個員工都選擇了
+            if not employee_1 or not employee_2:
+                messagebox.showwarning("錯誤", "請選擇兩個員工")
+                return
+            # 檢查是否選擇的是相同的員工
+            if employee_1 == employee_2:
+                messagebox.showwarning("錯誤", "兩個員工不能相同")
+                return
+            # 將禁排組合添加到列表中 (以小的名稱在前，較大的名稱在後，以避免重複)
+            exclusion_combination = sorted([employee_1, employee_2])
+            if exclusion_combination not in self.exclusions:
+                self.exclusions.append(exclusion_combination)
+                messagebox.showinfo("成功", f"成功新增禁排組合：{employee_1} 和 {employee_2}")
+            else:
+                messagebox.showwarning("錯誤", "這個禁排組合已經存在")
+            # 更新員工選單，以確保新員工加入時選單顯示最新員工列表
+            self.combo_exclusion_employee_1["values"] = list(self.employees.keys())
+            self.combo_exclusion_employee_2["values"] = list(self.employees.keys())
 
 if __name__ == "__main__":
     root = tk.Tk()
