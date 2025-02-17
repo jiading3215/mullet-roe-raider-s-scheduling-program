@@ -56,29 +56,30 @@ class SchedulingApp:
         self.btn_add = ttk.Button(root, text="新增員工", command=self.add_employee)
         self.btn_add.grid(row=3, column=3, padx=5, pady=5)
 
-        self.tree = ttk.Treeview(root, columns=("員工", "不可排班日", "一線", "二線"), show="headings")
-        self.tree.heading("員工", text="員工")
-        self.tree.heading("不可排班日", text="不可排班日")
-        self.tree.heading("一線", text="一線班數")
-        self.tree.heading("二線", text="二線班數")
-        self.tree.grid(row=4, column=0, columnspan=4, padx=5, pady=5)
+        # 員工基本資料表格
+        self.employee_tree = ttk.Treeview(root, columns=("員工", "不可排班日", "一線", "二線"), show="headings")
+        self.employee_tree.heading("員工", text="員工")
+        self.employee_tree.heading("不可排班日", text="不可排班日")
+        self.employee_tree.heading("一線", text="一線班數")
+        self.employee_tree.heading("二線", text="二線班數")
+        self.employee_tree.grid(row=4, column=0, columnspan=4, padx=5, pady=5)
 
         # 預先排班
-        self.label_year = ttk.Label(root, text="預先排班人員：")
-        self.label_year.grid(row=5, column=0, padx=5, pady=5)
+        self.label_employee = ttk.Label(root, text="預先排班人員：")
+        self.label_employee.grid(row=5, column=0, padx=5, pady=5)
         self.combo_employee = ttk.Combobox(root, values=list(self.employees.keys()), state="readonly", width=10)
         self.combo_employee.grid(row=5, column=1, padx=5, pady=5)
 
-        self.label_year = ttk.Label(root, text="日期：")
-        self.label_year.grid(row=5, column=2, padx=5, pady=5)
+        self.label_date = ttk.Label(root, text="日期：")
+        self.label_date.grid(row=5, column=2, padx=5, pady=5)
         self.date_options = []
         self.combo_date = ttk.Combobox(root, values=self.date_options, state="readonly", width=2)
         self.combo_date.grid(row=5, column=3, padx=5, pady=5)
         self.entry_year.bind("<<ComboboxSelected>>", self.update_dates)
         self.entry_month.bind("<<ComboboxSelected>>", self.update_dates)
         
-        self.label_year = ttk.Label(root, text="一線 / 二線：")
-        self.label_year.grid(row=6, column=0, padx=5, pady=5)
+        self.label_shift_type = ttk.Label(root, text="一線 / 二線：")
+        self.label_shift_type.grid(row=6, column=0, padx=5, pady=5)
         self.combo_shift_type = ttk.Combobox(root, values=["一線", "二線"], state="readonly", width=10)
         self.combo_shift_type.grid(row=6, column=1, padx=5, pady=5)
 
@@ -86,6 +87,13 @@ class SchedulingApp:
         self.btn_preassign.grid(row=6, column=3, columnspan=2, padx=5, pady=5)
 
         self.update_dates()
+
+        # 預排班次結果表格
+        self.shift_tree = ttk.Treeview(root, columns=("員工", "日期", "班次"), show="headings")
+        self.shift_tree.heading("員工", text="員工")
+        self.shift_tree.heading("日期", text="日期")
+        self.shift_tree.heading("班次", text="班次")
+        self.shift_tree.grid(row=7, column=0, columnspan=4, padx=5, pady=5)
 
     def update_dates(self, event=None):
         year = int(self.year_var.get())
@@ -109,7 +117,7 @@ class SchedulingApp:
             self.employees[name] = []
             self.unavailable_dates[name] = unavailable_dates_list
             self.shift_counts[name] = {"一線": int(primary_shifts), "二線": int(secondary_shifts)}
-            self.tree.insert("", tk.END, iid=name, values=(name, ", ".join(map(str, unavailable_dates_list)), primary_shifts, secondary_shifts))
+            self.employee_tree.insert("", tk.END, iid=name, values=(name, ", ".join(map(str, unavailable_dates_list)), primary_shifts, secondary_shifts))
             self.combo_employee["values"] = list(self.employees.keys())
             self.entry_name.delete(0, tk.END)
             self.entry_unavailable.delete(0, tk.END)
@@ -119,76 +127,39 @@ class SchedulingApp:
             messagebox.showwarning("錯誤", "請輸入有效的員工名稱或避免重複")
 
     def preassign_shift(self):
-        # 確認所有欄位都已選擇
-        selected_employee = self.combo_employee.get()
-        selected_date = self.combo_date.get()
-        selected_shift = self.combo_shift_type.get()
+        employee = self.combo_employee.get()
+        date = self.combo_date.get()
+        shift_type = self.combo_shift_type.get()
 
-        if not selected_employee or not selected_date or not selected_shift:
-            messagebox.showwarning("錯誤", "請選擇所有欄位！")
+        if not employee or not date or not shift_type:
+            messagebox.showwarning("錯誤", "請選擇員工、日期和班次")
             return
 
-        # 確認該員工的不可排班日是否包含選擇的日期
-        if selected_date in self.unavailable_dates.get(selected_employee, []):
-            messagebox.showwarning("錯誤", f"{selected_employee} 在 {selected_date} 不可排班！")
+        # 如果員工尚未有預排班次，則創建一個新的列表
+        if employee not in self.preassigned_shifts:
+            self.preassigned_shifts[employee] = []
+
+        # 確保這個員工在這個日期和班次上還沒排過班
+        if any(item['date'] == date and item['shift'] == shift_type for item in self.preassigned_shifts[employee]):
+            messagebox.showwarning("錯誤", f"{employee} 已在 {date} 排過 {shift_type} 班")
             return
 
-        # 如果所有條件都符合，將該員工的排班記錄新增到 `preassigned_shifts` 中
-        if selected_employee not in self.preassigned_shifts:
-            self.preassigned_shifts[selected_employee] = {}
+        # 將新的排班信息加入列表
+        self.preassigned_shifts[employee].append({'date': date, 'shift': shift_type})
 
-        self.preassigned_shifts[selected_employee][selected_date] = selected_shift
-        messagebox.showinfo("成功", f"{selected_employee} 已經在 {selected_date} 預排為 {selected_shift}！")
-
-'''
-    def add_unavailable_date(self):
-        name = self.combo_employee.get().strip()
-        dates = self.entry_unavailable.get().strip()
-
-        if not name:
-            messagebox.showwarning("錯誤", "請先選擇員工")
-            return
-
-        if name not in self.unavailable_dates:
-            self.unavailable_dates[name] = []
-
-        if dates:
-            try:
-                days = [int(day) for day in dates.split(',') if day.strip().isdigit()]
-                self.unavailable_dates[name].extend(days)
-                self.unavailable_dates[name] = sorted(set(self.unavailable_dates[name]))  # 移除重複並排序
-                self.tree.item(name, values=(
-                    name,
-                    self.shift_counts[name]["一線"],
-                    self.shift_counts[name]["二線"],
-                    ', '.join(map(str, self.unavailable_dates[name]))
-                ))
-                self.entry_unavailable.delete(0, tk.END)
-            except ValueError:
-                messagebox.showwarning("錯誤", "請輸入有效的數字日期（用逗號分隔）")
-        else:
-            messagebox.showwarning("錯誤", "請輸入不可排班日")
-    
-    def add_preassigned_shift(self):
-        name = self.combo_employee.get()
-        day = self.entry_day.get().strip()
-        shift_type = self.combo_shift.get()
+        messagebox.showinfo("成功", f"成功為 {employee} 預排 {date} 的 {shift_type} 班")
         
-        if not name or not day.isdigit() or not shift_type:
-            messagebox.showwarning("錯誤", "請選擇員工並輸入有效日期和班次")
-            return
+        self.update_preassigned_shifts_treeview()
+
+    def update_preassigned_shifts_treeview(self):
+        # 清空 Treeview
+        for row in self.shift_tree.get_children():
+            self.shift_tree.delete(row)
         
-        day = int(day)
-        if name not in self.preassigned_shifts:
-            self.preassigned_shifts[name] = {}
-        self.preassigned_shifts[name][day] = shift_type
-        
-        messagebox.showinfo("成功", f"{name} 已被指定 {day} 號值 {shift_type} 班")
-        self.entry_day.delete(0, tk.END)
-    
-    def generate_schedule(self):
-        messagebox.showinfo("提示", "排班功能尚未實作！")
-'''
+        # 將 preassigned_shifts 中的資料顯示在 Treeview
+        for employee, shifts in self.preassigned_shifts.items():
+            for shift in shifts:
+                self.shift_tree.insert("", tk.END, values=(employee, shift['date'], shift['shift']))
 
 
 
