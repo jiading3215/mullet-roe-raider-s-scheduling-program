@@ -1,8 +1,8 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import pandas as pd
 from datetime import datetime
-import random
+import os
 import calendar
 
 class SchedulingApp:
@@ -111,7 +111,7 @@ class SchedulingApp:
         self.exclusion_tree.heading("員工2", text="員工2")
         self.exclusion_tree.grid(row=9, column=0, columnspan=4, padx=5, pady=5)
 
-        self.btn_generate_excel = ttk.Button(root, text="生成班表", command=self.generate_excel_schedule)
+        self.btn_generate_excel = ttk.Button(root, text="生成班表", command=self.generate_schedule_excel)
         self.btn_generate_excel.grid(row=10, column=0, columnspan=4, padx=5, pady=5)
 
     def update_dates(self, event=None):
@@ -248,14 +248,13 @@ class SchedulingApp:
                 available_secondary = [e for e in available_secondary if e != prev_primary and e != prev_secondary]
             if not available_primary or not available_secondary:
                 continue  # 如果當天沒人可排，跳過
-            
-            # 按上次排班時間與剩餘排班次數加權排序，選擇最久沒排班且尚需排班的人
-            available_primary.sort(key=lambda e: (last_assigned[e], -remaining_shifts[e]))
+            # 計算加權排序值：剩餘天數 / 尚須排班次數
+            days_remaining = num_days - day + 1
+            available_primary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
             primary = available_primary[0] if self.schedule[day]["一線"] is None else self.schedule[day]["一線"]
-            
             # 確保 secondary 不與 primary 組成禁排組合
             available_secondary = [e for e in available_secondary if e != primary and sorted([primary, e]) not in self.exclusions]
-            available_secondary.sort(key=lambda e: (last_assigned[e], -remaining_shifts[e]))
+            available_secondary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
             secondary = available_secondary[0] if available_secondary and self.schedule[day]["二線"] is None else self.schedule[day]["二線"]
             self.schedule[day]["一線"] = primary
             self.schedule[day]["二線"] = secondary
@@ -264,6 +263,29 @@ class SchedulingApp:
             remaining_shifts[primary] -= 1
             remaining_shifts[secondary] -= 1
         messagebox.showinfo("成功", "班表已生成！")
+
+    def generate_schedule_excel(self):
+        self.generate_schedule()
+        if not self.schedule:
+            messagebox.showwarning("警告", "請先生成班表！")
+            return
+
+        # 轉換班表為 DataFrame
+        data = []
+        for day, shifts in self.schedule.items():
+            data.append([f"{self.year_var.get()}-{self.month_var.get()}-{day}", shifts["一線"], shifts["二線"]])
+
+        df = pd.DataFrame(data, columns=["日期", "一線", "二線"])
+
+        # 讓使用者選擇儲存位置
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel 文件", "*.xlsx")],
+            title="儲存 Excel 班表"
+        )
+        if file_path:
+            df.to_excel(file_path, index=False)
+            messagebox.showinfo("成功", f"班表已成功儲存至 {os.path.basename(file_path)}！")
 
 if __name__ == "__main__":
     root = tk.Tk()
