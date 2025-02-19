@@ -11,9 +11,10 @@ class SchedulingApp:
         self.root.title("林鼎鈞無償加班系統")
         self.employees = {}
         self.unavailable_dates = {}
+        self.shift_counts = {}
         self.preassigned_shifts = {}
         self.exclusions = []
-        self.shift_counts = {}
+        self.schedule = {}
 
         # 選擇年月
         self.label_year = ttk.Label(root, text="選擇年份：")
@@ -209,108 +210,60 @@ class SchedulingApp:
         for exclusion in self.exclusions:
             self.exclusion_tree.insert("", tk.END, values=(exclusion[0], exclusion[1]))
 
-    def assign_shifts(self):
-        # 1. 優先處理預先排班的員工
-        for employee, shifts in self.preassigned_shifts.items():
-            for shift in shifts:
-                self.schedule_shift(employee, shift['date'], shift['shift'])
-        
-        # 2. 根據每位員工的需求排班
-        for employee, shift_info in self.shift_counts.items():
-            total_shifts_needed = shift_info["一線"] + shift_info["二線"]
-            unavailable_dates = self.unavailable_dates.get(employee, [])
-            
-            # 根據總排班次數排班，間隔最大化
-            shift_dates = self.schedule_shifts_for_employee(employee, total_shifts_needed, unavailable_dates)
-            
-            # 更新員工的排班資訊
-            self.schedule[employee] = shift_dates
-
-    def schedule_shifts_for_employee(self, employee, total_shifts_needed, unavailable_dates):
-        scheduled_dates = []  # 儲存排班的日期
-        all_dates = list(range(1, 31))  # 假設每個月有30天
-        available_dates = [date for date in all_dates if date not in unavailable_dates]
-
-        # 根據排班次數計算最大間隔
-        gap = len(available_dates) // total_shifts_needed
-
-        while total_shifts_needed > 0 and available_dates:
-            # 找到最大間隔的可排日期
-            possible_dates = [date for date in available_dates if not self.is_consecutive_shift(employee, date)]
-            if not possible_dates:
-                break
-
-            # 根據計算的間隔挑選日期
-            selected_date = available_dates[min(range(len(available_dates)), key=lambda i: abs(available_dates[i] - gap))]
-            self.schedule_shift(employee, selected_date, "未指定")  # "未指定"代表班次為待定
-            scheduled_dates.append(selected_date)
-            available_dates.remove(selected_date)
-            total_shifts_needed -= 1
-
-        return scheduled_dates
-
-    def schedule_shift(self, employee, date, shift_type):
-        # 檢查禁排組合
-        if any((employee, other) in self.exclusions or (other, employee) in self.exclusions for other in self.schedule):
-            print(f"禁排組合：{employee} 在 {date} 不可與其他員工排班")
-            return
-        
-        # 確認該日期和班次不重複
-        if employee not in self.schedule:
-            self.schedule[employee] = []
-        self.schedule[employee].append({'date': date, 'shift': shift_type})
-
-    def is_consecutive_shift(self, employee, date):
-        # 檢查該員工是否在日期前後有排班
-        for shift in self.schedule.get(employee, []):
-            if abs(shift['date'] - date) == 1:  # 檢查是否為連續排班
-                return True
-        return False
-
-    def print_schedule(self):
-        # 輸出排班結果
-        for employee, shifts in self.schedule.items():
-            print(f"{employee} 排班：")
-            for shift in shifts:
-                print(f"  日期: {shift['date']}, 班次: {shift['shift']}")
-
-    def generate_excel_schedule(self):
-        # 獲取所選的年份和月份
+    def generate_schedule(self):
         year = int(self.year_var.get())
         month = int(self.month_var.get())
-        
-        # 根據年份和月份獲取該月的天數
         _, num_days = calendar.monthrange(year, month)
-        
-        # 創建一個空的 DataFrame 來存儲排班結果
-        columns = ['日期', '一線班', '二線班']
-        schedule_data = []
-
-        # 遍歷每一天的排班
-        for date in range(1, num_days + 1):  # 動態處理該月的天數
-            one_line_shifts = []  # 儲存一線班的員工
-            two_line_shifts = []  # 儲存二線班的員工
-
-            # 查找每個員工是否在該日期有排班
-            for employee, shifts in self.schedule.items():
-                for shift in shifts:
-                    if shift['date'] == date:
-                        if shift['shift'] == "一線":
-                            one_line_shifts.append(employee)
-                        elif shift['shift'] == "二線":
-                            two_line_shifts.append(employee)
-
-            # 將該日期的排班添加到資料中
-            schedule_data.append([date, ', '.join(one_line_shifts), ', '.join(two_line_shifts)])
-
-        # 使用 pandas 創建 DataFrame
-        df = pd.DataFrame(schedule_data, columns=columns)
-
-        # 儲存為 Excel 文件
-        file_name = f"排班表_{year}_{month}.xlsx"
-        df.to_excel(file_name, index=False, engine='openpyxl')
-
-        messagebox.showinfo("成功", f"排班表已生成：{file_name}")
+        # 初始化 schedule 和 last_assigned 記錄員工上次排班的日期
+        self.schedule = {day: {"一線": None, "二線": None} for day in range(1, num_days + 1)}
+        last_assigned = {e: -999 for e in self.employees.keys()}  # 初始值設為遠古時期
+        remaining_shifts = {e: self.shift_counts[e]["一線"] + self.shift_counts[e]["二線"] for e in self.shift_counts}  # 剩餘需要排的班次數
+        # 先將預先排班資料填入 schedule
+        for employee, shifts in self.preassigned_shifts.items():
+            for shift in shifts:
+                day = int(shift['date'])
+                shift_type = shift['shift']
+                if day in self.schedule:
+                    self.schedule[day][shift_type] = employee
+                    last_assigned[employee] = day  # 記錄上次排班日期
+                    remaining_shifts[employee] -= 1
+        for day in range(1, num_days + 1):
+            available_primary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
+            available_secondary = available_primary.copy()
+            # 如果當天的班次已被預先指定，則跳過自動指派
+            if self.schedule[day]["一線"] is not None:
+                if self.schedule[day]["一線"] in available_primary:
+                    available_primary.remove(self.schedule[day]["一線"])
+            if self.schedule[day]["二線"] is not None:
+                if self.schedule[day]["二線"] in available_secondary:
+                    available_secondary.remove(self.schedule[day]["二線"])
+            # 移除不可排班日的員工
+            available_primary = [e for e in available_primary if day not in self.unavailable_dates.get(e, [])]
+            available_secondary = [e for e in available_secondary if day not in self.unavailable_dates.get(e, [])]
+            # 移除前一天已經上班的員工
+            if day > 1:
+                prev_primary = self.schedule[day - 1]["一線"]
+                prev_secondary = self.schedule[day - 1]["二線"]
+                available_primary = [e for e in available_primary if e != prev_primary and e != prev_secondary]
+                available_secondary = [e for e in available_secondary if e != prev_primary and e != prev_secondary]
+            if not available_primary or not available_secondary:
+                continue  # 如果當天沒人可排，跳過
+            
+            # 按上次排班時間與剩餘排班次數加權排序，選擇最久沒排班且尚需排班的人
+            available_primary.sort(key=lambda e: (last_assigned[e], -remaining_shifts[e]))
+            primary = available_primary[0] if self.schedule[day]["一線"] is None else self.schedule[day]["一線"]
+            
+            # 確保 secondary 不與 primary 組成禁排組合
+            available_secondary = [e for e in available_secondary if e != primary and sorted([primary, e]) not in self.exclusions]
+            available_secondary.sort(key=lambda e: (last_assigned[e], -remaining_shifts[e]))
+            secondary = available_secondary[0] if available_secondary and self.schedule[day]["二線"] is None else self.schedule[day]["二線"]
+            self.schedule[day]["一線"] = primary
+            self.schedule[day]["二線"] = secondary
+            last_assigned[primary] = day  # 更新排班記錄
+            last_assigned[secondary] = day  # 更新排班記錄
+            remaining_shifts[primary] -= 1
+            remaining_shifts[secondary] -= 1
+        messagebox.showinfo("成功", "班表已生成！")
 
 if __name__ == "__main__":
     root = tk.Tk()
