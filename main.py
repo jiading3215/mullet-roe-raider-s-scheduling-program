@@ -111,8 +111,11 @@ class SchedulingApp:
         self.exclusion_tree.heading("員工2", text="員工2")
         self.exclusion_tree.grid(row=9, column=0, columnspan=4, padx=5, pady=5)
 
-        self.btn_generate_excel = ttk.Button(root, text="生成班表", command=self.generate_schedule_excel)
-        self.btn_generate_excel.grid(row=10, column=0, columnspan=4, padx=5, pady=5)
+        self.btn_generate_schedule = ttk.Button(root, text="生成班表", command=self.generate_schedule)
+        self.btn_generate_schedule.grid(row=10, column=1, padx=5, pady=5)
+
+        self.btn_save_excel = ttk.Button(root, text="儲存 Excel", command=self.save_excel)
+        self.btn_save_excel.grid(row=10, column=2, padx=5, pady=5)
 
     def update_dates(self, event=None):
         year = int(self.year_var.get())
@@ -264,19 +267,15 @@ class SchedulingApp:
             remaining_shifts[secondary] -= 1
         messagebox.showinfo("成功", "班表已生成！")
 
-    def generate_schedule_excel(self):
-        self.generate_schedule()
+    def save_excel(self):
         if not self.schedule:
             messagebox.showwarning("警告", "請先生成班表！")
             return
-
-        # 轉換班表為 DataFrame
+        # 將班表轉換為 DataFrame
         data = []
         for day, shifts in self.schedule.items():
             data.append([f"{self.year_var.get()}-{self.month_var.get()}-{day}", shifts["一線"], shifts["二線"]])
-
         df = pd.DataFrame(data, columns=["日期", "一線", "二線"])
-
         # 讓使用者選擇儲存位置
         file_path = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
@@ -285,7 +284,7 @@ class SchedulingApp:
         )
         if file_path:
             df.to_excel(file_path, index=False)
-            messagebox.showinfo("成功", f"班表已成功儲存至 {os.path.basename(file_path)}！")
+            messagebox.showinfo("成功", f"班表已儲存！")
 
 if __name__ == "__main__":
     root = tk.Tk()
