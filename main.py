@@ -324,10 +324,17 @@ class SchedulingApp:
             messagebox.showwarning("警告", "請先生成班表！")
             return
         # 將班表轉換為 DataFrame
-        data = []
+        data1 = []
+        data2 = []
+        data3 = []
         for day, shifts in self.schedule.items():
-            data.append([f"{self.year_var.get()}-{self.month_var.get()}-{day}", shifts["一線"], shifts["二線"]])
-        df = pd.DataFrame(data, columns=["日期", "一線", "二線"])
+            data1.append([f"{self.year_var.get()}-{self.month_var.get()}-{day}", shifts["一線"], shifts["二線"]])
+        for name, shifts in self.shift_counts.items():
+            data2.append([name, shifts["一線"], shifts["二線"]])
+        df1 = pd.DataFrame(data1, columns=["日期", "一線", "二線"])
+        df2 = pd.DataFrame(data2, columns=["員工", "剩餘一線", "剩餘二線"])
+        df3 = pd.DataFrame(data3, columns=[""])
+        df = pd.concat([df1, df3, df2], axis=1)
         # 讓使用者選擇儲存位置
         filename = f"{self.year_var.get()}-{self.month_var.get()}"
         file_path = filedialog.asksaveasfilename(
