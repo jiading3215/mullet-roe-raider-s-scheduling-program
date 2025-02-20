@@ -177,10 +177,22 @@ class SchedulingApp:
         if any(item['date'] == previous_day or item['date'] == next_day for item in self.preassigned_shifts[employee]):
             messagebox.showwarning("錯誤", f"{employee} 不能在 {date} 前後兩天排班")
             return
+        # 員工班次超出限制
+        if self.shift_counts[employee]["一線"] <= 0 and shift_type == "一線":
+            messagebox.showwarning("錯誤", f"{employee} 的班次超出限制")
+            return
+        if self.shift_counts[employee]["二線"] <= 0 and shift_type == "二線":
+            messagebox.showwarning("錯誤", f"{employee} 的班次超出限制")
+            return
         # 將新的排班信息加入列表
         self.preassigned_shifts[employee].append({'date': date, 'shift': shift_type})
         messagebox.showinfo("成功", f"成功為 {employee} 預排 {date} 的 {shift_type} 班")
         self.update_preassigned_shifts_treeview()
+        # 更新員工班次資訊
+        if shift_type == "一線":
+            self.shift_counts[employee]["一線"] -= 1
+        elif shift_type == "二線":
+            self.shift_counts[employee]["二線"] -= 1
 
     def update_preassigned_shifts_treeview(self):
         # 清空 Treeview
@@ -239,7 +251,11 @@ class SchedulingApp:
                     self.schedule[day][shift_type] = employee
                     last_assigned[employee] = day  # 記錄上次排班日期
                     remaining_shifts[employee] -= 1
+                    
         for day in range(1, num_days + 1):
+            if self.schedule[day]["一線"] is not None and self.schedule[day]["二線"] is not None:
+              continue  # 該日已排滿，跳過
+            
             available_primary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
             available_secondary = available_primary.copy()
             # 如果當天的班次已被預先指定，則跳過自動指派
@@ -286,10 +302,12 @@ class SchedulingApp:
             data.append([f"{self.year_var.get()}-{self.month_var.get()}-{day}", shifts["一線"], shifts["二線"]])
         df = pd.DataFrame(data, columns=["日期", "一線", "二線"])
         # 讓使用者選擇儲存位置
+        filename = f"{self.year_var.get()}-{self.month_var.get()}"
         file_path = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
+            initialfile=filename,
             filetypes=[("Excel 文件", "*.xlsx")],
-            title="儲存 Excel 班表"
+            title="儲存 Excel"
         )
         if file_path:
             df.to_excel(file_path, index=False)
