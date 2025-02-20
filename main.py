@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import pandas as pd
 from datetime import datetime
-import os
 import calendar
 
 class SchedulingApp:
@@ -87,7 +86,7 @@ class SchedulingApp:
         self.btn_preassign = ttk.Button(root, text="預先排班", command=self.preassign_shift)
         self.btn_preassign.grid(row=6, column=3, columnspan=2, padx=5, pady=5)
 
-        self.update_dates()
+        self.update_dates() # 在開啟時初始化
 
         # 預排班次結果表格
         self.shift_tree = ttk.Treeview(root, columns=("員工", "日期", "班次"), show="headings")
@@ -117,14 +116,6 @@ class SchedulingApp:
         self.btn_save_excel = ttk.Button(root, text="儲存 Excel", command=self.save_excel)
         self.btn_save_excel.grid(row=10, column=2, padx=5, pady=5)
 
-    def update_dates(self, event=None):
-        year = int(self.year_var.get())
-        month = int(self.month_var.get())
-        _, num_days = calendar.monthrange(year, month)
-        self.date_options = [str(day) for day in range(1, num_days + 1)]
-        self.combo_date["values"] = self.date_options
-        self.combo_date.set('')
-
     def add_employee(self):
         name = self.entry_name.get().strip()
         if name and name not in self.employees:
@@ -150,6 +141,14 @@ class SchedulingApp:
         else:
             messagebox.showwarning("錯誤", "請輸入有效的員工名稱或避免重複")
 
+    def update_dates(self, event=None):
+        year = int(self.year_var.get())
+        month = int(self.month_var.get())
+        _, num_days = calendar.monthrange(year, month)
+        self.date_options = [str(day) for day in range(1, num_days + 1)]
+        self.combo_date["values"] = self.date_options
+        self.combo_date.set('')
+
     def preassign_shift(self):
         employee = self.combo_employee.get()
         date = self.combo_date.get()
@@ -164,9 +163,19 @@ class SchedulingApp:
         # 如果員工尚未有預排班次，則創建一個新的列表
         if employee not in self.preassigned_shifts:
             self.preassigned_shifts[employee] = []
-        # 確保這個員工在這個日期和班次上還沒排過班
-        if any(item['date'] == date and item['shift'] == shift_type for item in self.preassigned_shifts[employee]):
-            messagebox.showwarning("錯誤", f"{employee} 已在 {date} 排過 {shift_type} 班")
+        # 檢查該日期和班次是否已經有人排班
+        if any(item['date'] == date and item['shift'] == shift_type for emp_shifts in self.preassigned_shifts.values() for item in emp_shifts):
+            messagebox.showwarning("錯誤", f"{date} 的 {shift_type} 班次已經有人排班")
+            return
+        # 檢查員工是否在同一天排過其他班次
+        if any(item['date'] == date for item in self.preassigned_shifts[employee]):
+            messagebox.showwarning("錯誤", f"{employee} 已在 {date} 排過班")
+            return
+        # 不能連續兩天上班
+        previous_day = str(int(date) - 1)
+        next_day = str(int(date) + 1)
+        if any(item['date'] == previous_day or item['date'] == next_day for item in self.preassigned_shifts[employee]):
+            messagebox.showwarning("錯誤", f"{employee} 不能在 {date} 前後兩天排班")
             return
         # 將新的排班信息加入列表
         self.preassigned_shifts[employee].append({'date': date, 'shift': shift_type})
