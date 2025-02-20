@@ -251,7 +251,7 @@ class SchedulingApp:
                     self.schedule[day][shift_type] = employee
         for day in range(1, num_days + 1):
             if self.schedule[day]["一線"] is not None and self.schedule[day]["二線"] is not None:
-              continue  # 該日已排滿，跳過
+                continue  # 該日已排滿，跳過
             elif self.schedule[day]["一線"] is None and self.schedule[day]["二線"] is not None:
                 available_primary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
                 emp = self.schedule[day]["二線"]
