@@ -86,7 +86,7 @@ class SchedulingApp:
         self.btn_preassign = ttk.Button(root, text="預先排班", command=self.preassign_shift)
         self.btn_preassign.grid(row=6, column=3, columnspan=2, padx=5, pady=5)
 
-        self.update_dates() # 在開啟時初始化
+        self.update_dates()  # 在開啟時初始化
 
         # 預排班次結果表格
         self.shift_tree = ttk.Treeview(root, columns=("員工", "日期", "班次"), show="headings")
@@ -249,15 +249,37 @@ class SchedulingApp:
                 shift_type = shift['shift']
                 if day in self.schedule:
                     self.schedule[day][shift_type] = employee
-                    last_assigned[employee] = day  # 記錄上次排班日期
-                    remaining_shifts[employee] -= 1
-                    
         for day in range(1, num_days + 1):
             if self.schedule[day]["一線"] is not None and self.schedule[day]["二線"] is not None:
               continue  # 該日已排滿，跳過
+            elif self.schedule[day]["一線"] is None and self.schedule[day]["二線"] is not None:
+                available_primary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
+                emp = self.schedule[day]["二線"]
+                available_primary = [e for e in available_primary if e != emp and sorted([e, emp]) not in self.exclusions]  # 移除自己和 exclusions
+            elif self.schedule[day]["一線"] is not None and self.schedule[day]["二線"] is None:
+                available_secondary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
+                emp = self.schedule[day]["一線"]
+                available_secondary = [e for e in available_secondary if e != emp and sorted([e, emp]) not in self.exclusions]
+            else:
+                available_primary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
+                available_secondary = available_primary.copy()
+
+            # 移除前一天已經上班的員工
+            if day > 1:
+                prev_primary = self.schedule[day - 1]["一線"]
+                prev_secondary = self.schedule[day - 1]["二線"]
+                available_primary = [e for e in available_primary if e != prev_primary and e != prev_secondary]
+                available_secondary = [e for e in available_secondary if e != prev_primary and e != prev_secondary]
+            # 移除後一天已經上班的員工
+            if day < num_days:
+                after_primary = self.schedule[day + 1]["一線"]
+                after_secondary = self.schedule[day + 1]["二線"]
+                available_primary = [e for e in available_primary if e != after_primary and e != after_secondary]
+                available_secondary = [e for e in available_secondary if e != after_primary and e != after_secondary]
+
             
-            available_primary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
-            available_secondary = available_primary.copy()
+
+            
             # 如果當天的班次已被預先指定，則跳過自動指派
             if self.schedule[day]["一線"] is not None:
                 if self.schedule[day]["一線"] in available_primary:
@@ -265,15 +287,11 @@ class SchedulingApp:
             if self.schedule[day]["二線"] is not None:
                 if self.schedule[day]["二線"] in available_secondary:
                     available_secondary.remove(self.schedule[day]["二線"])
-            # 移除不可排班日的員工
-            available_primary = [e for e in available_primary if day not in self.unavailable_dates.get(e, [])]
-            available_secondary = [e for e in available_secondary if day not in self.unavailable_dates.get(e, [])]
-            # 移除前一天已經上班的員工
-            if day > 1:
-                prev_primary = self.schedule[day - 1]["一線"]
-                prev_secondary = self.schedule[day - 1]["二線"]
-                available_primary = [e for e in available_primary if e != prev_primary and e != prev_secondary]
-                available_secondary = [e for e in available_secondary if e != prev_primary and e != prev_secondary]
+
+
+
+
+
             if not available_primary or not available_secondary:
                 continue  # 如果當天沒人可排，跳過
             # 計算加權排序值：剩餘天數 / 尚須排班次數
