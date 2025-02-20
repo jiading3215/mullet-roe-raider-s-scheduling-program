@@ -256,14 +256,17 @@ class SchedulingApp:
                 available_primary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
                 emp = self.schedule[day]["二線"]
                 available_primary = [e for e in available_primary if e != emp and sorted([e, emp]) not in self.exclusions]  # 移除自己和 exclusions
+                available_primary = [e for e in available_primary if self.shift_counts[e]["一線"] > 0]  # 移除一線班次用完的員工
             elif self.schedule[day]["一線"] is not None and self.schedule[day]["二線"] is None:
                 available_secondary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
                 emp = self.schedule[day]["一線"]
                 available_secondary = [e for e in available_secondary if e != emp and sorted([e, emp]) not in self.exclusions]
+                available_secondary = [e for e in available_secondary if self.shift_counts[e]["二線"] > 0]  # 移除二線班次用完的員工
             else:
                 available_primary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
                 available_secondary = available_primary.copy()
-
+                available_primary = [e for e in available_primary if self.shift_counts[e]["一線"] > 0]  # 移除一線班次用完的員工
+                available_secondary = [e for e in available_secondary if self.shift_counts[e]["二線"] > 0]  # 移除二線班次用完的員工
             # 移除前一天已經上班的員工
             if day > 1:
                 prev_primary = self.schedule[day - 1]["一線"]
@@ -276,38 +279,44 @@ class SchedulingApp:
                 after_secondary = self.schedule[day + 1]["二線"]
                 available_primary = [e for e in available_primary if e != after_primary and e != after_secondary]
                 available_secondary = [e for e in available_secondary if e != after_primary and e != after_secondary]
-
-            
-
-            
-            # 如果當天的班次已被預先指定，則跳過自動指派
-            if self.schedule[day]["一線"] is not None:
-                if self.schedule[day]["一線"] in available_primary:
-                    available_primary.remove(self.schedule[day]["一線"])
-            if self.schedule[day]["二線"] is not None:
-                if self.schedule[day]["二線"] in available_secondary:
-                    available_secondary.remove(self.schedule[day]["二線"])
-
-
-
-
-
-            if not available_primary or not available_secondary:
-                continue  # 如果當天沒人可排，跳過
-            # 計算加權排序值：剩餘天數 / 尚須排班次數
-            days_remaining = num_days - day + 1
-            available_primary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
-            primary = available_primary[0] if self.schedule[day]["一線"] is None else self.schedule[day]["一線"]
-            # 確保 secondary 不與 primary 組成禁排組合
-            available_secondary = [e for e in available_secondary if e != primary and sorted([primary, e]) not in self.exclusions]
-            available_secondary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
-            secondary = available_secondary[0] if available_secondary and self.schedule[day]["二線"] is None else self.schedule[day]["二線"]
-            self.schedule[day]["一線"] = primary
-            self.schedule[day]["二線"] = secondary
-            last_assigned[primary] = day  # 更新排班記錄
-            last_assigned[secondary] = day  # 更新排班記錄
-            remaining_shifts[primary] -= 1
-            remaining_shifts[secondary] -= 1
+            # 排班
+            days_remaining = num_days - day + 1  # 計算加權排序值：剩餘天數 / 尚須排班次數
+            if self.schedule[day]["一線"] is None and self.schedule[day]["二線"] is not None:  # 只有一線有缺
+                if not available_primary:
+                    continue  # 如果當天沒人可排，跳過
+                available_primary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
+                primary = available_primary[0]
+                self.schedule[day]["一線"] = primary
+                last_assigned[primary] = day
+                remaining_shifts[primary] -= 1
+                self.shift_counts[primary]["一線"] -= 1
+            elif self.schedule[day]["一線"] is not None and self.schedule[day]["二線"] is None:  # 只有二線有缺
+                if not available_secondary:
+                    continue
+                available_secondary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
+                secondary = available_secondary[0]
+                self.schedule[day]["二線"] = secondary
+                last_assigned[secondary] = day
+                remaining_shifts[secondary] -= 1
+                self.shift_counts[secondary]["二線"] -= 1
+            elif self.schedule[day]["一線"] is None and self.schedule[day]["二線"] is None:  # 一線二線都有缺
+                if not available_primary:
+                    continue
+                available_primary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
+                primary = available_primary[0]
+                self.schedule[day]["一線"] = primary
+                last_assigned[primary] = day
+                remaining_shifts[primary] -= 1
+                self.shift_counts[primary]["一線"] -= 1
+                available_secondary = [e for e in available_secondary if e != primary and sorted([e, primary]) not in self.exclusions]  # 在一線排完後更新合格的二線名單
+                if not available_secondary:
+                    continue
+                available_secondary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
+                secondary = available_secondary[0]
+                self.schedule[day]["二線"] = secondary
+                last_assigned[secondary] = day
+                remaining_shifts[secondary] -= 1
+                self.shift_counts[secondary]["二線"] -= 1
         messagebox.showinfo("成功", "班表已生成！")
 
     def save_excel(self):
