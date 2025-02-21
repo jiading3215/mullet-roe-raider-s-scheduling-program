@@ -54,7 +54,7 @@ class SchedulingApp:
         self.entry_shift_secondary.grid(row=2, column=3, padx=5, pady=5)
 
         self.btn_add = ttk.Button(root, text="新增員工", command=self.add_employee)
-        self.btn_add.grid(row=3, column=3, padx=5, pady=5)
+        self.btn_add.grid(row=3, column=0, columnspan=4, padx=5, pady=5)
 
         # 員工基本資料表格
         self.employee_tree = ttk.Treeview(root, columns=("員工", "不可排班日", "一線", "二線"), show="headings")
@@ -77,14 +77,14 @@ class SchedulingApp:
         self.combo_date.grid(row=5, column=3, padx=5, pady=5)
         self.entry_year.bind("<<ComboboxSelected>>", self.update_dates)
         self.entry_month.bind("<<ComboboxSelected>>", self.update_dates)
-        
+
         self.label_shift_type = ttk.Label(root, text="一線 / 二線：")
         self.label_shift_type.grid(row=6, column=0, padx=5, pady=5)
         self.combo_shift_type = ttk.Combobox(root, values=["一線", "二線"], state="readonly", width=10)
         self.combo_shift_type.grid(row=6, column=1, padx=5, pady=5)
 
         self.btn_preassign = ttk.Button(root, text="預先排班", command=self.preassign_shift)
-        self.btn_preassign.grid(row=6, column=3, columnspan=2, padx=5, pady=5)
+        self.btn_preassign.grid(row=6, column=2, columnspan=2, padx=5, pady=5)
 
         self.update_dates()  # 在開啟時初始化
 
