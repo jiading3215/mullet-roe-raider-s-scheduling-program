@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import calendar
 import random
+import copy
 
 class SchedulingApp:
     def __init__(self, root):
@@ -241,6 +242,9 @@ class SchedulingApp:
         _, num_days = calendar.monthrange(year, month)
         # 初始化 schedule
         self.schedule = {day: {"一線": None, "二線": None} for day in range(1, num_days + 1)}
+        # 建立副本 (全域，後面還會用到)，確保原始資料不變
+        global temp_shift_counts
+        temp_shift_counts = copy.deepcopy(self.shift_counts)
         # 先將預先排班資料填入 schedule
         for employee, shifts in self.preassigned_shifts.items():
             for shift in shifts:
@@ -255,17 +259,17 @@ class SchedulingApp:
                 available_primary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
                 emp = self.schedule[day]["二線"]
                 available_primary = [e for e in available_primary if e != emp and sorted([e, emp]) not in self.exclusions]  # 移除自己和 exclusions
-                available_primary = [e for e in available_primary if self.shift_counts[e]["一線"] > 0]  # 移除一線班次用完的員工
+                available_primary = [e for e in available_primary if temp_shift_counts[e]["一線"] > 0]  # 移除一線班次用完的員工
             elif self.schedule[day]["一線"] is not None and self.schedule[day]["二線"] is None:
                 available_secondary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
                 emp = self.schedule[day]["一線"]
                 available_secondary = [e for e in available_secondary if e != emp and sorted([e, emp]) not in self.exclusions]
-                available_secondary = [e for e in available_secondary if self.shift_counts[e]["二線"] > 0]  # 移除二線班次用完的員工
+                available_secondary = [e for e in available_secondary if temp_shift_counts[e]["二線"] > 0]  # 移除二線班次用完的員工
             else:
                 available_primary = [e for e in self.employees.keys() if day not in self.unavailable_dates.get(e, [])]
                 available_secondary = available_primary.copy()
-                available_primary = [e for e in available_primary if self.shift_counts[e]["一線"] > 0]  # 移除一線班次用完的員工
-                available_secondary = [e for e in available_secondary if self.shift_counts[e]["二線"] > 0]  # 移除二線班次用完的員工
+                available_primary = [e for e in available_primary if temp_shift_counts[e]["一線"] > 0]  # 移除一線班次用完的員工
+                available_secondary = [e for e in available_secondary if temp_shift_counts[e]["二線"] > 0]  # 移除二線班次用完的員工
             # 移除前一天已經上班的員工
             if day > 1:
                 prev_primary = self.schedule[day - 1]["一線"]
@@ -284,25 +288,25 @@ class SchedulingApp:
                     continue  # 如果當天沒人可排，跳過
                 primary = random.choice(available_primary)
                 self.schedule[day]["一線"] = primary
-                self.shift_counts[primary]["一線"] -= 1
+                temp_shift_counts[primary]["一線"] -= 1
             elif self.schedule[day]["一線"] is not None and self.schedule[day]["二線"] is None:  # 只有二線有缺
                 if not available_secondary:
                     continue
                 secondary = random.choice(available_secondary)
                 self.schedule[day]["二線"] = secondary
-                self.shift_counts[secondary]["二線"] -= 1
+                temp_shift_counts[secondary]["二線"] -= 1
             elif self.schedule[day]["一線"] is None and self.schedule[day]["二線"] is None:  # 一線二線都有缺
                 if not available_primary:
                     continue
                 primary = random.choice(available_primary)
                 self.schedule[day]["一線"] = primary
-                self.shift_counts[primary]["一線"] -= 1
+                temp_shift_counts[primary]["一線"] -= 1
                 available_secondary = [e for e in available_secondary if e != primary and sorted([e, primary]) not in self.exclusions]  # 在一線排完後更新合格的二線名單
                 if not available_secondary:
                     continue
                 secondary = random.choice(available_secondary)
                 self.schedule[day]["二線"] = secondary
-                self.shift_counts[secondary]["二線"] -= 1
+                temp_shift_counts[secondary]["二線"] -= 1
         messagebox.showinfo("成功", "班表已生成！")
 
     def save_excel(self):
@@ -315,7 +319,7 @@ class SchedulingApp:
         data3 = []
         for day, shifts in self.schedule.items():
             data1.append([f"{self.year_var.get()}-{self.month_var.get()}-{day}", shifts["一線"], shifts["二線"]])
-        for name, shifts in self.shift_counts.items():
+        for name, shifts in temp_shift_counts.items():
             data2.append([name, shifts["一線"], shifts["二線"]])
         df1 = pd.DataFrame(data1, columns=["日期", "一線", "二線"])
         df2 = pd.DataFrame(data2, columns=["員工", "剩餘一線", "剩餘二線"])
