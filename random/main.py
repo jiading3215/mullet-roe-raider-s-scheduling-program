@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, filedialog
 import pandas as pd
 from datetime import datetime
 import calendar
+import random
 
 class SchedulingApp:
     def __init__(self, root):
@@ -238,10 +239,8 @@ class SchedulingApp:
         year = int(self.year_var.get())
         month = int(self.month_var.get())
         _, num_days = calendar.monthrange(year, month)
-        # 初始化 schedule 和 last_assigned 記錄員工上次排班的日期
+        # 初始化 schedule
         self.schedule = {day: {"一線": None, "二線": None} for day in range(1, num_days + 1)}
-        last_assigned = {e: -999 for e in self.employees.keys()}  # 初始值設為遠古時期
-        remaining_shifts = {e: self.shift_counts[e]["一線"] + self.shift_counts[e]["二線"] for e in self.shift_counts}  # 剩餘需要排的班次數
         # 先將預先排班資料填入 schedule
         for employee, shifts in self.preassigned_shifts.items():
             for shift in shifts:
@@ -280,42 +279,29 @@ class SchedulingApp:
                 available_primary = [e for e in available_primary if e != after_primary and e != after_secondary]
                 available_secondary = [e for e in available_secondary if e != after_primary and e != after_secondary]
             # 排班
-            days_remaining = num_days - day + 1  # 計算加權排序值：剩餘天數 / 尚須排班次數
             if self.schedule[day]["一線"] is None and self.schedule[day]["二線"] is not None:  # 只有一線有缺
                 if not available_primary:
                     continue  # 如果當天沒人可排，跳過
-                available_primary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
-                primary = available_primary[0]
+                primary = random.choice(available_primary)
                 self.schedule[day]["一線"] = primary
-                last_assigned[primary] = day
-                remaining_shifts[primary] -= 1
                 self.shift_counts[primary]["一線"] -= 1
             elif self.schedule[day]["一線"] is not None and self.schedule[day]["二線"] is None:  # 只有二線有缺
                 if not available_secondary:
                     continue
-                available_secondary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
-                secondary = available_secondary[0]
+                secondary = random.choice(available_secondary)
                 self.schedule[day]["二線"] = secondary
-                last_assigned[secondary] = day
-                remaining_shifts[secondary] -= 1
                 self.shift_counts[secondary]["二線"] -= 1
             elif self.schedule[day]["一線"] is None and self.schedule[day]["二線"] is None:  # 一線二線都有缺
                 if not available_primary:
                     continue
-                available_primary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
-                primary = available_primary[0]
+                primary = random.choice(available_primary)
                 self.schedule[day]["一線"] = primary
-                last_assigned[primary] = day
-                remaining_shifts[primary] -= 1
                 self.shift_counts[primary]["一線"] -= 1
                 available_secondary = [e for e in available_secondary if e != primary and sorted([e, primary]) not in self.exclusions]  # 在一線排完後更新合格的二線名單
                 if not available_secondary:
                     continue
-                available_secondary.sort(key=lambda e: (days_remaining / (remaining_shifts[e] + 1), last_assigned[e]))
-                secondary = available_secondary[0]
+                secondary = random.choice(available_secondary)
                 self.schedule[day]["二線"] = secondary
-                last_assigned[secondary] = day
-                remaining_shifts[secondary] -= 1
                 self.shift_counts[secondary]["二線"] -= 1
         messagebox.showinfo("成功", "班表已生成！")
 
